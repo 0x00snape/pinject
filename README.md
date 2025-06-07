@@ -8,11 +8,14 @@ PINJECT is a seamless process injector for Linux, which inject your payload dire
 PINJECT uses simple method to inject payload into the running process.
   1) Pass the target process name you want to inject.<br>
   2) PINJECT itself recognize the pid of the target process and attach to it.<br>
-  3) It identifies offset of RIP register.<br>
-  4) And, overwrites existing bytes of RIP with shellcode/payload.<br>
-  5) Then, it restore the original instruction of target program.<br>
+  3) It sets tracer option (PTRACE_O_TRACEFORK) to trace forks into target process.<br>
+  4) Saves the original registers, RIP and instruction.<br>
+  5) Inject shellcode that call fork() syscall.<br>
+  6) Catch that injected fork() syscall with getevent() for getting the child pid CPID.<br>
+  7) And, overwrites existing bytes of RIP with payload on that child process.<br>
+  8) Then, it restore the original instruction of target program.<br>
   
-<code>For testing phase i use shellcode that prints "Injected: ar.p" but can use bind-shell or reverse-shell with no exit syscall</code>
+<code>For testing phase i use shellcode that prints "Injected: ar.p" but can use bind-shell or reverse-shell</code>
 
 ## Usage
 ```bash
