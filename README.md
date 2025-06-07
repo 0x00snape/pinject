@@ -31,7 +31,7 @@ Works with target process having proper write permissions.
 
 ## POC
 _____________________________________________
-![pocinject](https://github.com/user-attachments/assets/320c4dc3-e6ae-4194-a396-c413062805ef)
+![pocinject](https://github.com/user-attachments/assets/f79ff778-4a9c-4b4a-9f93-63fa26434889)
 ______________________________________________
 
 ## License
