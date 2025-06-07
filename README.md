@@ -2,7 +2,7 @@ _____________________________________________
 ![maxresdefault](https://github.com/user-attachments/assets/e00aef3a-4bf6-47de-b8d0-7029aa9e3b1b)
 ______________________________________________
 # PINJECT
-PINJECT is a seamless process injector for Linux, which inject your payload directly into other running process. It restore normal execution flow of the target program.
+PINJECT is a seamless process injector for Linux, which inject your payload directly into other running process. It restore normal execution flow of the target program after payload injected.
 
 ## Working
 PINJECT uses simple method to inject payload into the running process.
