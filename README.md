@@ -25,12 +25,13 @@ PINJECT uses simple method to inject payload into the running process.
 ```
 
 
+
 ## Disclaimer 
 Works with target process having proper write permissions.
 
 ## POC
 _____________________________________________
-![pocpinject](https://github.com/user-attachments/assets/3eebe7a5-54f6-4ae2-9e79-7cfc261462e4)
+![pocinject](https://github.com/user-attachments/assets/320c4dc3-e6ae-4194-a396-c413062805ef)
 ______________________________________________
 
 ## License
