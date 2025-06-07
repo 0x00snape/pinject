@@ -24,8 +24,14 @@ PINJECT uses simple method to inject payload into the running process.
 :$ cargo build --release
 ```
 
+
 ## Disclaimer 
 Works with target process having proper write permissions.
+
+## POC
+_____________________________________________
+![pocpinject](https://github.com/user-attachments/assets/3eebe7a5-54f6-4ae2-9e79-7cfc261462e4)
+______________________________________________
 
 ## License
 This project is licensed under [MIT](https://github.com/0x00snape/pinject/blob/main/LICENSE)
